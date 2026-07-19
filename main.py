@@ -1,12 +1,18 @@
 import time
 import math
 import sys
+import socket
+import json
 from mpu6050 import MPU6050
 from hmc5883l import HMC5883L
 
 # Local Declination Angle (optional, adjust for your location)
 # Find yours at http://www.magnetic-declination.com/
 DECLINATION_ANGLE_DEG = 0.0  # Set this for accurate true north calculation
+
+# UDP Configuration
+UDP_IP = "127.0.0.1"  # Target IP address (change to receiver's IP or "255.255.255.255" for broadcast)
+UDP_PORT = 5005       # Target UDP Port
 
 def calculate_heading(mag_x, mag_y, declination_deg=0.0):
     """
@@ -50,6 +56,12 @@ def main():
         print("Make sure your connections are secure and I2C is enabled on the Pi.")
         sys.exit(1)
         
+    # Set up UDP socket
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    if UDP_IP == "255.255.255.255":
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    print(f"UDP Socket initialized targeting {UDP_IP}:{UDP_PORT}")
+    
     print("\nStarting data stream. Press Ctrl+C to stop.\n")
     print("-" * 75)
     print(f"{'Accel (g)':^18} | {'Gyro (°/s)':^18} | {'Mag (µT)':^18} | {'Heading':^8} | {'Temp':^6}")
@@ -69,6 +81,24 @@ def main():
             # Compute Heading
             heading = calculate_heading(magnetic['x'], magnetic['y'], DECLINATION_ANGLE_DEG)
             
+            # Construct payload
+            payload = {
+                "timestamp": time.time(),
+                "accel": accel,
+                "gyro": gyro,
+                "mag": magnetic,
+                "heading": heading,
+                "temp": temp
+            }
+            
+            # Send via UDP
+            try:
+                message = json.dumps(payload).encode('utf-8')
+                sock.sendto(message, (UDP_IP, UDP_PORT))
+            except Exception as udp_err:
+                # Do not crash the loop if UDP send temporarily fails
+                pass
+            
             # Print formatted data line
             accel_str = f"{accel['x']:.2f},{accel['y']:.2f},{accel['z']:.2f}"
             gyro_str = f"{gyro['x']:.1f},{gyro['y']:.1f},{gyro['z']:.1f}"
@@ -86,7 +116,9 @@ def main():
     finally:
         imu.close()
         mag.close()
-        print("I2C connections closed cleanly.")
+        sock.close()
+        print("Connections closed cleanly.")
 
 if __name__ == '__main__':
     main()
+

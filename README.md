@@ -61,10 +61,35 @@ pip install -r requirements.txt
 
 ## Running the Code
 
+### 1. Run the Receiver / Client (on your monitoring PC or the Pi)
+To start listening for incoming sensor telemetry, run:
+```bash
+python client.py
+```
+
+### 2. Run the Sensor Publisher (on the Raspberry Pi)
 Execute the main script to start streaming sensor readings:
 ```bash
 python main.py
 ```
 
 ### Key Customization
-In [main.py](file:///c:/Users/Legion/Desktop/IK/main.py), you can customize `DECLINATION_ANGLE_DEG` to get accurate true-north headings based on your location. Find your declination angle at [magnetic-declination.com](http://www.magnetic-declination.com/).
+In [main.py](file:///c:/Users/Legion/Desktop/IK/main.py), you can customize:
+- `DECLINATION_ANGLE_DEG`: Set this to get accurate true-north headings based on your location. Find your declination angle at [magnetic-declination.com](http://www.magnetic-declination.com/).
+- `UDP_IP`: Target IP address to send sensor data (e.g., target laptop's IP, or `"255.255.255.255"` for local network broadcast).
+- `UDP_PORT`: Port number for UDP transmission (default is `5005`).
+
+### UDP Payload format
+The payload is sent as a JSON string with the following structure:
+```json
+{
+  "timestamp": 1721389811.234,
+  "accel": {"x": 0.01, "y": -0.02, "z": 0.98},
+  "gyro": {"x": 0.1, "y": -0.2, "z": 0.05},
+  "mag": {"x": -2.3, "y": 25.1, "z": -40.2},
+  "heading": 85.3,
+  "temp": 28.5
+}
+```
+
+
