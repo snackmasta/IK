@@ -37,10 +37,10 @@ class MadgwickAHRS:
         mz /= mag_norm
 
         # Reference direction of Earth's magnetic field
-        2q1mx = 2.0 * q1 * mx
-        2q1my = 2.0 * q1 * my
-        2q1mz = 2.0 * q1 * mz
-        2q2mx = 2.0 * q2 * mx
+        _2q1mx = 2.0 * q1 * mx
+        _2q1my = 2.0 * q1 * my
+        _2q1mz = 2.0 * q1 * mz
+        _2q2mx = 2.0 * q2 * mx
 
         hx = mx * (q1*q1 + q2*q2 - q3*q3 - q4*q4) + 2.0 * my * (q2*q3 - q1*q4) + 2.0 * mz * (q2*q4 + q1*q3)
         hy = 2.0 * mx * (q2*q3 + q1*q4) + my * (q1*q1 - q2*q2 + q3*q3 - q4*q4) + 2.0 * mz * (q3*q4 - q1*q2)
@@ -48,14 +48,14 @@ class MadgwickAHRS:
         bz = 2.0 * mx * (q2*q4 - q1*q3) + 2.0 * my * (q3*q4 + q1*q2) + mz * (q1*q1 - q2*q2 - q3*q3 + q4*q4)
 
         # Auxiliary variables
-        2q1 = 2.0 * q1
-        2q2 = 2.0 * q2
-        2q3 = 2.0 * q3
-        2q4 = 2.0 * q4
-        2bx = 2.0 * bx
-        2bz = 2.0 * bz
-        4bx = 4.0 * bx
-        4bz = 4.0 * bz
+        _2q1 = 2.0 * q1
+        _2q2 = 2.0 * q2
+        _2q3 = 2.0 * q3
+        _2q4 = 2.0 * q4
+        _2bx = 2.0 * bx
+        _2bz = 2.0 * bz
+        _4bx = 4.0 * bx
+        _4bz = 4.0 * bz
         q1q1 = q1 * q1
         q1q2 = q1 * q2
         q1q3 = q1 * q3
@@ -72,19 +72,20 @@ class MadgwickAHRS:
             2.0 * (q2q4 - q1q3) - ax,
             2.0 * (q1q2 + q3q4) - ay,
             2.0 * (0.5 - q2q2 - q3q3) - az,
-            2bx * (0.5 - q3q3 - q4q4) + 2bz * (q2q4 - q1q3) - mx,
-            2bx * (q2q3 - q1q4) + 2bz * (q1q2 + q3q4) - my,
-            2bx * (q1q3 + q2q4) + 2bz * (0.5 - q2q2 - q3q3) - mz
+            _2bx * (0.5 - q3q3 - q4q4) + _2bz * (q2q4 - q1q3) - mx,
+            _2bx * (q2q3 - q1q4) + _2bz * (q1q2 + q3q4) - my,
+            _2bx * (q1q3 + q2q4) + _2bz * (0.5 - q2q2 - q3q3) - mz
         ], dtype=float)
 
         J = np.array([
-            [-2.0 * q3,                2.0 * q4,               -2.0 * q1,                2.0 * q2],
-            [ 2.0 * q2,                2.0 * q1,                2.0 * q4,                2.0 * q3],
-            [ 0.0,                    -4.0 * q2,               -4.0 * q3,                0.0],
-            [-2bz * q3,                2bz * q4,               -4bx * q3 - 2bz * q1,    -4bx * q4 + 2bz * q2],
-            [-2bx * q4 + 2bz * q2,     2bx * q3 + 2bz * q1,     2bx * q2 + 2bz * q4,    -2bx * q1 + 2bz * q3],
-            [ 2bx * q3,                2bx * q4 - 4bz * q2,     2bx * q1 - 4bz * q3,     2bx * q2]
+            [-2.0 * q3,                 2.0 * q4,                -2.0 * q1,                 2.0 * q2],
+            [ 2.0 * q2,                 2.0 * q1,                 2.0 * q4,                 2.0 * q3],
+            [ 0.0,                     -4.0 * q2,                -4.0 * q3,                 0.0],
+            [-_2bz * q3,                _2bz * q4,               -_4bx * q3 - _2bz * q1,    -_4bx * q4 + _2bz * q2],
+            [-_2bx * q4 + _2bz * q2,    _2bx * q3 + _2bz * q1,    _2bx * q2 + _2bz * q4,    -_2bx * q1 + _2bz * q3],
+            [ _2bx * q3,                _2bx * q4 - _4bz * q2,    _2bx * q1 - _4bz * q3,     _2bx * q2]
         ], dtype=float)
+
 
         step = J.T @ f
         step_norm = np.linalg.norm(step)
