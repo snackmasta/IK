@@ -102,8 +102,10 @@ def main():
             payload = {
                 "timestamp": current_time,
                 "dt": dt,
+                "magnetic_anomaly": pose.get("magnetic_anomaly", False),
                 "rotation": pose["rotation"],
                 "translation": pose["translation"],
+                "kinematic_arm": pose.get("kinematic_arm", {}),
                 "heading": heading,
                 "raw_imu": {
                     "accel": accel,
@@ -112,6 +114,7 @@ def main():
                     "temp": temp
                 }
             }
+
             
             # Send via UDP
             try:

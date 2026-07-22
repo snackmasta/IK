@@ -122,17 +122,44 @@ function createControllerMesh() {
   stickMesh.position.set(0, 0.04, 0);
   controllerGroup.add(stickMesh);
 
-  // 3D Axis Indicator Arrows (RGB = XYZ)
-  const axesHelper = new THREE.AxesHelper(0.2);
-  controllerGroup.add(axesHelper);
-
-  controllerGroup.traverse((child) => {
-    child.frustumCulled = false;
-  });
-  controllerGroup.frustumCulled = false;
+  // Construct SlimeVR Kinematic Arm Rig Line
+  createArmRig();
 
   scene.add(controllerGroup);
 }
+
+let armLineMesh;
+function createArmRig() {
+  const armGeo = new THREE.BufferGeometry();
+  const positions = new Float32Array(2 * 3); // 2 points (Shoulder to Hand)
+  armGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+  const armMat = new THREE.LineDashedMaterial({
+    color: 0x8b5cf6,
+    dashSize: 0.05,
+    gapSize: 0.03,
+    linewidth: 2
+  });
+
+  armLineMesh = new THREE.Line(armGeo, armMat);
+  armLineMesh.frustumCulled = false;
+  scene.add(armLineMesh);
+}
+
+function updateArmRig(shoulder, hand) {
+  if (!armLineMesh || !shoulder || !hand) return;
+  const positions = armLineMesh.geometry.attributes.position.array;
+  positions[0] = shoulder.x || 0.2;
+  positions[1] = shoulder.y || -0.2;
+  positions[2] = shoulder.z || 0.0;
+  positions[3] = hand.x || 0.0;
+  positions[4] = hand.y || 0.0;
+  positions[5] = hand.z || 0.0;
+
+  armLineMesh.geometry.attributes.position.needsUpdate = true;
+  armLineMesh.computeLineDistances();
+}
+
 
 // Initialize Dynamic 3D Trajectory Ribbon Line
 function createTrajectoryLine() {
@@ -217,6 +244,12 @@ function updateTelemetry(data) {
   // Add point to trajectory trail
   addTrajectoryPoint(posX, posY, posZ);
 
+  // Update SlimeVR Kinematic Arm Line Rig
+  if (data.kinematic_arm) {
+    updateArmRig(data.kinematic_arm.shoulder, { x: posX, y: posY, z: posZ });
+  }
+
+
   // Update Dashboard Text Metrics
   elPosX.textContent = posX.toFixed(2);
   elPosY.textContent = posY.toFixed(2);
@@ -235,6 +268,82 @@ function updateTelemetry(data) {
 
   const speed = Math.sqrt(vel.x * vel.x + vel.y * vel.y + vel.z * vel.z);
   elSpeed.textContent = `${speed.toFixed(2)} m/s`;
+
+  // Update real-time sensor graphs
+  if (data.raw_imu) {
+    updateSensorCharts(data.raw_imu);
+  }
+}
+
+// ----------------------------------------------------
+// Real-Time Sensor Graphs (Chart.js)
+// ----------------------------------------------------
+let accelChart, gyroChart, magChart;
+const MAX_CHART_SAMPLES = 50;
+
+function createSingleChart(canvasId, labelPrefix) {
+  const canvasEl = document.getElementById(canvasId);
+  if (!canvasEl) return null;
+  const ctx = canvasEl.getContext('2d');
+  return new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [
+        { label: `${labelPrefix} X`, data: [], borderColor: '#f43f5e', borderWidth: 1.5, pointRadius: 0, fill: false },
+        { label: `${labelPrefix} Y`, data: [], borderColor: '#10b981', borderWidth: 1.5, pointRadius: 0, fill: false },
+        { label: `${labelPrefix} Z`, data: [], borderColor: '#06b6d4', borderWidth: 1.5, pointRadius: 0, fill: false }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      scales: {
+        x: { display: false },
+        y: {
+          ticks: { color: '#94a3b8', font: { size: 9 } },
+          grid: { color: 'rgba(255,255,255,0.05)' }
+        }
+      },
+      plugins: {
+        legend: {
+          labels: { color: '#f8fafc', font: { size: 10 }, boxWidth: 8 }
+        }
+      }
+    }
+  });
+}
+
+function initSensorCharts() {
+  accelChart = createSingleChart('accelChart', 'Accel');
+  gyroChart = createSingleChart('gyroChart', 'Gyro');
+  magChart = createSingleChart('magChart', 'Mag');
+}
+
+function pushChartData(chart, xVal, yVal, zVal) {
+  if (!chart) return;
+  const labels = chart.data.labels;
+  labels.push('');
+  if (labels.length > MAX_CHART_SAMPLES) labels.shift();
+
+  chart.data.datasets[0].data.push(xVal);
+  if (chart.data.datasets[0].data.length > MAX_CHART_SAMPLES) chart.data.datasets[0].data.shift();
+
+  chart.data.datasets[1].data.push(yVal);
+  if (chart.data.datasets[1].data.length > MAX_CHART_SAMPLES) chart.data.datasets[1].data.shift();
+
+  chart.data.datasets[2].data.push(zVal);
+  if (chart.data.datasets[2].data.length > MAX_CHART_SAMPLES) chart.data.datasets[2].data.shift();
+
+  chart.update('none');
+}
+
+function updateSensorCharts(raw_imu) {
+  if (!raw_imu) return;
+  if (raw_imu.accel) pushChartData(accelChart, raw_imu.accel.x, raw_imu.accel.y, raw_imu.accel.z);
+  if (raw_imu.gyro) pushChartData(gyroChart, raw_imu.gyro.x, raw_imu.gyro.y, raw_imu.gyro.z);
+  if (raw_imu.mag) pushChartData(magChart, raw_imu.mag.x, raw_imu.mag.y, raw_imu.mag.z);
 }
 
 // Animation Frame Loop
@@ -266,6 +375,20 @@ function onWindowResize() {
 }
 
 // Bind Button Listeners
+const elGraphDrawer = document.getElementById('graphDrawer');
+const elBtnToggleGraphs = document.getElementById('btnToggleGraphs');
+const elBtnCloseDrawer = document.getElementById('btnCloseDrawer');
+
+function toggleGraphDrawer() {
+  if (!elGraphDrawer) return;
+  elGraphDrawer.classList.toggle('hidden');
+  const isVisible = !elGraphDrawer.classList.contains('hidden');
+  if (elBtnToggleGraphs) elBtnToggleGraphs.classList.toggle('active', isVisible);
+}
+
+if (elBtnToggleGraphs) elBtnToggleGraphs.addEventListener('click', toggleGraphDrawer);
+if (elBtnCloseDrawer) elBtnCloseDrawer.addEventListener('click', toggleGraphDrawer);
+
 document.getElementById('btnCalibrateDrift').addEventListener('click', () => {
   positionOffset = { ...rawLatestPos };
   trajectoryPoints = [];
@@ -276,7 +399,6 @@ document.getElementById('btnToggleFollow').addEventListener('click', (e) => {
   followMode = !followMode;
   e.currentTarget.classList.toggle('active', followMode);
 });
-
 
 document.getElementById('btnResetTrail').addEventListener('click', () => {
   trajectoryPoints = [];
@@ -304,6 +426,8 @@ document.getElementById('btnToggleGrid').addEventListener('click', (e) => {
 // Launch on page load
 window.addEventListener('DOMContentLoaded', () => {
   initScene();
+  initSensorCharts();
   connectTelemetryStream();
 });
+
 

@@ -19,6 +19,9 @@
   <!-- Three.js and OrbitControls -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  
+  <!-- Chart.js for Real-Time Telemetry Graphs -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
 
@@ -136,8 +139,35 @@
 
   </main>
 
+  <!-- Collapsible Real-Time Raw Sensor Graphs Drawer -->
+  <aside class="graph-drawer hidden" id="graphDrawer">
+    <div class="graph-drawer-header">
+      <h3><i class="fa-solid fa-chart-line me-2"></i> Real-Time Raw Sensor Streams</h3>
+      <button class="btn-close-drawer" id="btnCloseDrawer" title="Close Graphs"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    
+    <div class="graph-container">
+      <div class="graph-card">
+        <div class="graph-title"><i class="fa-solid fa-gauge-high me-2"></i> Accelerometer (g)</div>
+        <div class="canvas-box"><canvas id="accelChart"></canvas></div>
+      </div>
+      <div class="graph-card">
+        <div class="graph-title"><i class="fa-solid fa-rotate me-2"></i> Gyroscope (°/s)</div>
+        <div class="canvas-box"><canvas id="gyroChart"></canvas></div>
+      </div>
+      <div class="graph-card">
+        <div class="graph-title"><i class="fa-solid fa-magnet me-2"></i> Magnetometer (µT)</div>
+        <div class="canvas-box"><canvas id="magChart"></canvas></div>
+      </div>
+    </div>
+  </aside>
+
   <!-- Interactive Floating Toolbar -->
   <div class="hud-toolbar">
+    <button class="btn-tool" id="btnToggleGraphs" title="Toggle Real-Time Raw Graphs">
+      <i class="fa-solid fa-chart-line"></i>
+      <span>Raw Graphs</span>
+    </button>
     <button class="btn-tool" id="btnCalibrateDrift" title="Zero out position drift & recalibrate origin">
       <i class="fa-solid fa-compass-drafting"></i>
       <span>Zero Drift</span>
@@ -167,5 +197,6 @@
   <script src="app.js"></script>
 </body>
 </html>
+
 
 
