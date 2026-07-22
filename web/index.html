@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>6DoF VR Controller 3D Trajectory Visualizer</title>
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
+  
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Custom Styles -->
+  <link rel="stylesheet" href="style.css">
+  
+  <!-- Three.js and OrbitControls -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+
+  <!-- WebGL Render Canvas -->
+  <canvas id="canvas3d"></canvas>
+
+  <!-- Glassmorphism Header Overlay -->
+  <header class="hud-header">
+    <div class="brand">
+      <i class="fa-solid me-2 fa-vr-cardboard logo-icon"></i>
+      <div>
+        <h1>VR Controller 6DoF Visualizer</h1>
+        <p class="subtitle">IMU (0x68) + Magnetometer (0x1E) 3D Pose Tracking</p>
+      </div>
+    </div>
+    
+    <div class="status-container">
+      <span class="status-badge disconnected" id="statusBadge">
+        <span class="status-dot"></span>
+        <span id="statusText">Connecting...</span>
+      </span>
+    </div>
+  </header>
+
+  <!-- Glassmorphism Floating Telemetry Dashboard -->
+  <main class="hud-dashboard">
+    
+    <!-- Position Card -->
+    <div class="hud-card">
+      <div class="card-header">
+        <i class="fa-solid fa-location-crosshairs"></i>
+        <span>3D Translation (m)</span>
+      </div>
+      <div class="card-body grid-3">
+        <div class="metric">
+          <span class="label">X</span>
+          <span class="value" id="posX">0.00</span>
+        </div>
+        <div class="metric">
+          <span class="label">Y</span>
+          <span class="value" id="posY">0.00</span>
+        </div>
+        <div class="metric">
+          <span class="label">Z</span>
+          <span class="value" id="posZ">0.00</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Rotation Card (Euler) -->
+    <div class="hud-card">
+      <div class="card-header">
+        <i class="fa-solid fa-arrows-spin"></i>
+        <span>3D Rotation (Euler °)</span>
+      </div>
+      <div class="card-body grid-3">
+        <div class="metric">
+          <span class="label">Roll</span>
+          <span class="value highlight-roll" id="rotRoll">0.0°</span>
+        </div>
+        <div class="metric">
+          <span class="label">Pitch</span>
+          <span class="value highlight-pitch" id="rotPitch">0.0°</span>
+        </div>
+        <div class="metric">
+          <span class="label">Yaw</span>
+          <span class="value highlight-yaw" id="rotYaw">0.0°</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quaternion Card -->
+    <div class="hud-card">
+      <div class="card-header">
+        <i class="fa-solid fa-cube"></i>
+        <span>Quaternion [w, x, y, z]</span>
+      </div>
+      <div class="card-body grid-4">
+        <div class="metric-mini">
+          <span class="label">qw</span>
+          <span class="val-sm" id="qw">1.00</span>
+        </div>
+        <div class="metric-mini">
+          <span class="label">qx</span>
+          <span class="val-sm" id="qx">0.00</span>
+        </div>
+        <div class="metric-mini">
+          <span class="label">qy</span>
+          <span class="val-sm" id="qy">0.00</span>
+        </div>
+        <div class="metric-mini">
+          <span class="label">qz</span>
+          <span class="val-sm" id="qz">0.00</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Heading & Motion Card -->
+    <div class="hud-card">
+      <div class="card-header">
+        <i class="fa-solid fa-compass"></i>
+        <span>Heading & Speed</span>
+      </div>
+      <div class="card-body grid-2">
+        <div class="metric">
+          <span class="label">Heading</span>
+          <span class="value" id="headingVal">0.0°</span>
+        </div>
+        <div class="metric">
+          <span class="label">Speed</span>
+          <span class="value" id="speedVal">0.00 m/s</span>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Interactive Floating Toolbar -->
+  <div class="hud-toolbar">
+    <button class="btn-tool" id="btnResetTrail" title="Clear Trajectory Path">
+      <i class="fa-solid fa-broom"></i>
+      <span>Clear Trail</span>
+    </button>
+    <button class="btn-tool" id="btnResetPos" title="Reset Origin Position">
+      <i class="fa-solid fa-arrows-to-dot"></i>
+      <span>Reset Origin</span>
+    </button>
+    <button class="btn-tool" id="btnRecenterCam" title="Recenter 3D Camera">
+      <i class="fa-solid fa-video"></i>
+      <span>Recenter Cam</span>
+    </button>
+    <button class="btn-tool active" id="btnToggleGrid" title="Toggle Grid Plane">
+      <i class="fa-solid fa-border-all"></i>
+      <span>Toggle Grid</span>
+    </button>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

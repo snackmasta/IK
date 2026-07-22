@@ -61,17 +61,25 @@ pip install -r requirements.txt
 
 ## Running the Code
 
-### 1. Run the Receiver / Client (on your monitoring PC or the Pi)
-To start listening for incoming sensor telemetry, run:
+### 1. Run 3D Web Visualization Server (Interactive Web Dashboard)
+To launch the interactive 3D WebGL Dashboard with real-time trajectory visualization, run:
+```bash
+python web_server.py
+```
+Then open **[http://localhost:8000](http://localhost:8000)** in your web browser.
+
+### 2. Run CLI Console Receiver (Optional)
+To view raw text telemetry in your terminal, run:
 ```bash
 python client.py
 ```
 
-### 2. Run the Sensor Publisher (on the Raspberry Pi)
+### 3. Run Sensor Publisher (on the Raspberry Pi)
 Execute the main script to start streaming sensor readings:
 ```bash
 python main.py
 ```
+
 
 ### Key Customization
 In [main.py](file:///c:/Users/Legion/Desktop/IK/main.py), you can customize:
@@ -79,17 +87,30 @@ In [main.py](file:///c:/Users/Legion/Desktop/IK/main.py), you can customize:
 - `UDP_IP`: Target IP address to send sensor data (e.g., target laptop's IP, or `"255.255.255.255"` for local network broadcast).
 - `UDP_PORT`: Port number for UDP transmission (default is `5005`).
 
-### UDP Payload format
+### UDP Payload format (6DoF Pose Estimation)
 The payload is sent as a JSON string with the following structure:
 ```json
 {
   "timestamp": 1721389811.234,
-  "accel": {"x": 0.01, "y": -0.02, "z": 0.98},
-  "gyro": {"x": 0.1, "y": -0.2, "z": 0.05},
-  "mag": {"x": -2.3, "y": 25.1, "z": -40.2},
+  "dt": 0.02,
+  "rotation": {
+    "quaternion": {"w": 0.99, "x": 0.01, "y": 0.02, "z": -0.05},
+    "euler": {"roll": 1.2, "pitch": 2.3, "yaw": -5.7}
+  },
+  "translation": {
+    "position": {"x": 0.12, "y": -0.05, "z": 0.01},
+    "velocity": {"x": 0.01, "y": -0.00, "z": 0.00},
+    "linear_accel": {"x": 0.05, "y": -0.02, "z": 0.01}
+  },
   "heading": 85.3,
-  "temp": 28.5
+  "raw_imu": {
+    "accel": {"x": 0.01, "y": -0.02, "z": 0.98},
+    "gyro": {"x": 0.1, "y": -0.2, "z": 0.05},
+    "mag": {"x": -2.3, "y": 25.1, "z": -40.2},
+    "temp": 28.5
+  }
 }
 ```
+
 
 

@@ -5,6 +5,7 @@ import socket
 import json
 from mpu6050 import MPU6050
 from hmc5883l import HMC5883L
+from pose_estimator import PoseEstimator
 
 # Local Declination Angle (optional, adjust for your location)
 # Find yours at http://www.magnetic-declination.com/
@@ -36,12 +37,16 @@ def calculate_heading(mag_x, mag_y, declination_deg=0.0):
 def main():
     print("=" * 60)
     print("       Raspberry Pi 4 Sensor Reader: IMU & Magnetometer")
+    print("                  6DoF VR Controller Estimation")
     print("=" * 60)
     print(f"Connecting to I2C bus 1...")
     
     # Initialize sensors
     imu = MPU6050(bus_id=1)
     mag = HMC5883L(bus_id=1)
+    
+    # Initialize 6DoF Pose Estimator
+    pose_estimator = PoseEstimator(beta=0.1, vel_decay=0.95, zero_velocity_thresh=0.15)
     
     try:
         print("Initializing MPU6050 IMU (0x68)...", end=" ")
@@ -62,54 +67,69 @@ def main():
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     print(f"UDP Socket initialized targeting {UDP_IP}:{UDP_PORT}")
     
-    print("\nStarting data stream. Press Ctrl+C to stop.\n")
-    print("-" * 75)
-    print(f"{'Accel (g)':^18} | {'Gyro (°/s)':^18} | {'Mag (µT)':^18} | {'Heading':^8} | {'Temp':^6}")
-    print(f"{'X / Y / Z':^18} | {'X / Y / Z':^18} | {'X / Y / Z':^18} | {'(Deg)':^8} | {'(°C)':^6}")
-    print("-" * 75)
+    print("\nStarting 6DoF data stream. Press Ctrl+C to stop.\n")
+    print("-" * 85)
+    print(f"{'Position (m)':^18} | {'Euler Angles (deg)':^24} | {'Quaternion (w,x,y,z)':^24} | {'Heading':^8}")
+    print(f"{'X / Y / Z':^18} | {'Roll / Pitch / Yaw':^24} | {'w / x / y / z':^24} | {'(Deg)':^8}")
+    print("-" * 85)
+    
+    last_time = time.time()
     
     try:
         while True:
-            # Read IMU
+            current_time = time.time()
+            dt = current_time - last_time
+            last_time = current_time
+            
+            # Read IMU & Magnetometer
             accel = imu.read_accel_data()
             gyro = imu.read_gyro_data()
             temp = imu.read_temp()
-            
-            # Read Magnetometer
             magnetic = mag.read_magnetometer_data()
             
             # Compute Heading
             heading = calculate_heading(magnetic['x'], magnetic['y'], DECLINATION_ANGLE_DEG)
             
-            # Construct payload
+            # Compute 6DoF Pose (Rotation & Translation)
+            pose = pose_estimator.update(accel_g=accel, gyro_deg=gyro, mag_ut=magnetic, dt=dt)
+            
+            # Construct comprehensive payload
             payload = {
-                "timestamp": time.time(),
-                "accel": accel,
-                "gyro": gyro,
-                "mag": magnetic,
+                "timestamp": current_time,
+                "dt": dt,
+                "rotation": pose["rotation"],
+                "translation": pose["translation"],
                 "heading": heading,
-                "temp": temp
+                "raw_imu": {
+                    "accel": accel,
+                    "gyro": gyro,
+                    "mag": magnetic,
+                    "temp": temp
+                }
             }
             
             # Send via UDP
             try:
                 message = json.dumps(payload).encode('utf-8')
                 sock.sendto(message, (UDP_IP, UDP_PORT))
-            except Exception as udp_err:
-                # Do not crash the loop if UDP send temporarily fails
+            except Exception:
                 pass
             
-            # Print formatted data line
-            accel_str = f"{accel['x']:.2f},{accel['y']:.2f},{accel['z']:.2f}"
-            gyro_str = f"{gyro['x']:.1f},{gyro['y']:.1f},{gyro['z']:.1f}"
-            mag_str = f"{magnetic['x']:.1f},{magnetic['y']:.1f},{magnetic['z']:.1f}"
+            # Formatted console telemetry output
+            pos = pose["translation"]["position"]
+            euler = pose["rotation"]["euler"]
+            quat = pose["rotation"]["quaternion"]
+            
+            pos_str = f"{pos['x']:.2f},{pos['y']:.2f},{pos['z']:.2f}"
+            euler_str = f"{euler['roll']:.1f},{euler['pitch']:.1f},{euler['yaw']:.1f}"
+            quat_str = f"{quat['w']:.2f},{quat['x']:.2f},{quat['y']:.2f},{quat['z']:.2f}"
             
             sys.stdout.write(
-                f"\r{accel_str:^18} | {gyro_str:^18} | {mag_str:^18} | {heading:^8.1f} | {temp:^6.1f}"
+                f"\r{pos_str:^18} | {euler_str:^24} | {quat_str:^24} | {heading:^8.1f}"
             )
             sys.stdout.flush()
             
-            time.sleep(0.1) # 10Hz sampling rate
+            time.sleep(0.02) # 50Hz update rate for smoother VR controller tracking
             
     except KeyboardInterrupt:
         print("\n\nStopping sensor data stream.")
@@ -121,4 +141,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
