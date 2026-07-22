@@ -46,8 +46,8 @@ def main():
     mag = HMC5883L(bus_id=1)
     
     # Initialize 6DoF Pose Estimator & Start Drift Bias Calibration
-    pose_estimator = PoseEstimator(beta=0.1, vel_decay=0.95, zero_velocity_thresh=0.15)
-    
+    pose_estimator = PoseEstimator(kp=0.6, ki=0.005, vel_decay=0.92, zero_velocity_thresh=0.20)
+
     try:
         print("Initializing MPU6050 IMU (0x68)...", end=" ")
         imu.initialize()
