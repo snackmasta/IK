@@ -73,9 +73,14 @@
 
     <!-- Rotation Card (Euler) -->
     <div class="hud-card">
-      <div class="card-header">
-        <i class="fa-solid fa-arrows-spin"></i>
-        <span>3D Rotation (Euler °)</span>
+      <div class="card-header flex-between">
+        <div>
+          <i class="fa-solid fa-arrows-spin"></i>
+          <span>3D Rotation (Euler °)</span>
+        </div>
+        <button class="btn-card-action" id="btnQuickAxisSwap" title="Swap & Remap Axes">
+          <i class="fa-solid fa-sliders"></i> Swap Axes
+        </button>
       </div>
       <div class="card-body grid-3">
         <div class="metric">
@@ -139,6 +144,74 @@
 
   </main>
 
+  <!-- Collapsible Axis Remap / Swap Drawer -->
+  <aside class="axis-swap-drawer hidden" id="axisSwapDrawer">
+    <div class="drawer-header">
+      <h3><i class="fa-solid fa-sliders me-2"></i> Remap & Swap Rotation Axes</h3>
+      <button class="btn-close-drawer" id="btnCloseAxisDrawer" title="Close Axis Swap Panel"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    
+    <div class="swap-body">
+      <p class="swap-info"><i class="fa-solid fa-circle-info me-1"></i> Swap input source or invert sign for Roll, Pitch, and Yaw.</p>
+
+      <!-- Roll Control -->
+      <div class="swap-row">
+        <label class="swap-label highlight-roll"><i class="fa-solid fa-rotate-right me-1"></i> Roll Output</label>
+        <div class="swap-inputs">
+          <select id="selectRollAxis" class="swap-select">
+            <option value="roll">Source: Roll</option>
+            <option value="pitch">Source: Pitch</option>
+            <option value="yaw">Source: Yaw</option>
+          </select>
+          <label class="swap-check-label">
+            <input type="checkbox" id="chkInvertRoll"> Invert (-)
+          </label>
+        </div>
+      </div>
+
+      <!-- Pitch Control -->
+      <div class="swap-row">
+        <label class="swap-label highlight-pitch"><i class="fa-solid fa-arrows-up-down me-1"></i> Pitch Output</label>
+        <div class="swap-inputs">
+          <select id="selectPitchAxis" class="swap-select">
+            <option value="roll">Source: Roll</option>
+            <option value="pitch">Source: Pitch</option>
+            <option value="yaw">Source: Yaw</option>
+          </select>
+          <label class="swap-check-label">
+            <input type="checkbox" id="chkInvertPitch"> Invert (-)
+          </label>
+        </div>
+      </div>
+
+      <!-- Yaw Control -->
+      <div class="swap-row">
+        <label class="swap-label highlight-yaw"><i class="fa-solid fa-arrows-left-right me-1"></i> Yaw Output</label>
+        <div class="swap-inputs">
+          <select id="selectYawAxis" class="swap-select">
+            <option value="roll">Source: Roll</option>
+            <option value="pitch">Source: Pitch</option>
+            <option value="yaw">Source: Yaw</option>
+          </select>
+          <label class="swap-check-label">
+            <input type="checkbox" id="chkInvertYaw"> Invert (-)
+          </label>
+        </div>
+      </div>
+
+      <!-- Presets -->
+      <div class="preset-section">
+        <span class="preset-title">Quick Presets:</span>
+        <div class="preset-grid">
+          <button class="btn-preset" id="presetDefault">Default (R,P,Y)</button>
+          <button class="btn-preset" id="presetSwapRP">Swap Roll ↔ Pitch</button>
+          <button class="btn-preset" id="presetSwapPY">Swap Pitch ↔ Yaw</button>
+          <button class="btn-preset" id="presetSwapRY">Swap Roll ↔ Yaw</button>
+        </div>
+      </div>
+    </div>
+  </aside>
+
   <!-- Collapsible Real-Time Raw Sensor Graphs Drawer -->
   <aside class="graph-drawer hidden" id="graphDrawer">
     <div class="graph-drawer-header">
@@ -147,6 +220,10 @@
     </div>
     
     <div class="graph-container">
+      <div class="graph-card">
+        <div class="graph-title"><i class="fa-solid fa-arrows-spin me-2"></i> Orientation (Roll, Pitch, Yaw °)</div>
+        <div class="canvas-box"><canvas id="eulerChart"></canvas></div>
+      </div>
       <div class="graph-card">
         <div class="graph-title"><i class="fa-solid fa-gauge-high me-2"></i> Accelerometer (g)</div>
         <div class="canvas-box"><canvas id="accelChart"></canvas></div>
@@ -164,6 +241,10 @@
 
   <!-- Interactive Floating Toolbar -->
   <div class="hud-toolbar">
+    <button class="btn-tool" id="btnToggleAxisSwap" title="Remap / Swap Roll, Pitch, Yaw Axes">
+      <i class="fa-solid fa-sliders"></i>
+      <span>Swap Axes</span>
+    </button>
     <button class="btn-tool" id="btnToggleGraphs" title="Toggle Real-Time Raw Graphs">
       <i class="fa-solid fa-chart-line"></i>
       <span>Raw Graphs</span>

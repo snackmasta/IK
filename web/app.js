@@ -186,16 +186,54 @@ function connectTelemetryStream() {
   };
 }
 
+// ----------------------------------------------------
+// Axis Remap & Swap State
+// ----------------------------------------------------
+let axisSwapConfig = {
+  rollSource: 'roll',
+  pitchSource: 'pitch',
+  yawSource: 'yaw',
+  invertRoll: false,
+  invertPitch: false,
+  invertYaw: false
+};
+
+function loadAxisSwapConfig() {
+  try {
+    const saved = localStorage.getItem('slimevr_axis_swap_config');
+    if (saved) {
+      axisSwapConfig = { ...axisSwapConfig, ...JSON.parse(saved) };
+    }
+  } catch (e) {
+    console.warn('Could not load saved axis config', e);
+  }
+}
+
+function saveAxisSwapConfig() {
+  try {
+    localStorage.setItem('slimevr_axis_swap_config', JSON.stringify(axisSwapConfig));
+  } catch (e) {}
+}
+
+function getMappedAxisValue(source, invert, rawEulerObj) {
+  const val = rawEulerObj[source] || 0;
+  return invert ? -val : val;
+}
+
 // Update 3D Model and Telemetry Dashboard UI
 function updateTelemetry(data) {
   if (!data || !data.translation || !data.rotation) return;
 
   const rawPos = data.translation.position || { x: 0, y: 0, z: 0 };
   rawLatestPos = rawPos;
-  const euler = data.rotation.euler || { roll: 0, pitch: 0, yaw: 0 };
-
-  const quat = data.rotation.quaternion || { w: 1, x: 0, y: 0, z: 0 };
+  const rawEuler = data.rotation.euler || { roll: 0, pitch: 0, yaw: 0 };
+  const rawQuat = data.rotation.quaternion || { w: 1, x: 0, y: 0, z: 0 };
   const vel = data.translation.velocity || { x: 0, y: 0, z: 0 };
+
+  // Remap Roll, Pitch, and Yaw according to user settings
+  const mappedRoll = getMappedAxisValue(axisSwapConfig.rollSource, axisSwapConfig.invertRoll, rawEuler);
+  const mappedPitch = getMappedAxisValue(axisSwapConfig.pitchSource, axisSwapConfig.invertPitch, rawEuler);
+  const mappedYaw = getMappedAxisValue(axisSwapConfig.yawSource, axisSwapConfig.invertYaw, rawEuler);
 
   // Calculate position adjusted for origin reset
   const posX = rawPos.x - positionOffset.x;
@@ -204,25 +242,41 @@ function updateTelemetry(data) {
 
   // Update target 3D transform
   currentTargetPos.set ? currentTargetPos.set(posX, posY, posZ) : (currentTargetPos = { x: posX, y: posY, z: posZ });
-  currentTargetQuat.set(quat.x, quat.y, quat.z, quat.w); // Three.js uses (x, y, z, w)
+
+  // Apply custom axis mapping to 3D rotation quaternion if modified from default
+  const isCustomMapping = axisSwapConfig.rollSource !== 'roll' ||
+                          axisSwapConfig.pitchSource !== 'pitch' ||
+                          axisSwapConfig.yawSource !== 'yaw' ||
+                          axisSwapConfig.invertRoll ||
+                          axisSwapConfig.invertPitch ||
+                          axisSwapConfig.invertYaw;
+
+  if (isCustomMapping) {
+    const rollRad = THREE.MathUtils.degToRad(mappedRoll);
+    const pitchRad = THREE.MathUtils.degToRad(mappedPitch);
+    const yawRad = THREE.MathUtils.degToRad(mappedYaw);
+    const mappedEulerObj = new THREE.Euler(pitchRad, yawRad, rollRad, 'YXZ');
+    currentTargetQuat.setFromEuler(mappedEulerObj);
+  } else {
+    currentTargetQuat.set(rawQuat.x, rawQuat.y, rawQuat.z, rawQuat.w); // Three.js uses (x, y, z, w)
+  }
 
   // Add point to trajectory trail
   addTrajectoryPoint(posX, posY, posZ);
-
 
   // Update Dashboard Text Metrics
   elPosX.textContent = posX.toFixed(2);
   elPosY.textContent = posY.toFixed(2);
   elPosZ.textContent = posZ.toFixed(2);
 
-  elRoll.textContent = `${euler.roll.toFixed(1)}°`;
-  elPitch.textContent = `${euler.pitch.toFixed(1)}°`;
-  elYaw.textContent = `${euler.yaw.toFixed(1)}°`;
+  elRoll.textContent = `${mappedRoll.toFixed(1)}°`;
+  elPitch.textContent = `${mappedPitch.toFixed(1)}°`;
+  elYaw.textContent = `${mappedYaw.toFixed(1)}°`;
 
-  elQw.textContent = quat.w.toFixed(2);
-  elQx.textContent = quat.x.toFixed(2);
-  elQy.textContent = quat.y.toFixed(2);
-  elQz.textContent = quat.z.toFixed(2);
+  elQw.textContent = currentTargetQuat.w.toFixed(2);
+  elQx.textContent = currentTargetQuat.x.toFixed(2);
+  elQy.textContent = currentTargetQuat.y.toFixed(2);
+  elQz.textContent = currentTargetQuat.z.toFixed(2);
 
   elHeading.textContent = `${(data.heading || 0).toFixed(1)}°`;
 
@@ -230,6 +284,7 @@ function updateTelemetry(data) {
   elSpeed.textContent = `${speed.toFixed(2)} m/s`;
 
   // Update real-time sensor graphs
+  pushChartData(eulerChart, mappedRoll, mappedPitch, mappedYaw);
   if (data.raw_imu) {
     updateSensorCharts(data.raw_imu);
   }
@@ -238,21 +293,25 @@ function updateTelemetry(data) {
 // ----------------------------------------------------
 // Real-Time Sensor Graphs (Chart.js)
 // ----------------------------------------------------
-let accelChart, gyroChart, magChart;
+let accelChart, gyroChart, magChart, eulerChart;
 const MAX_CHART_SAMPLES = 50;
 
-function createSingleChart(canvasId, labelPrefix) {
+function createSingleChart(canvasId, labelPrefix, customColors) {
   const canvasEl = document.getElementById(canvasId);
   if (!canvasEl) return null;
   const ctx = canvasEl.getContext('2d');
+
+  const labels = Array.isArray(labelPrefix) ? labelPrefix : [`${labelPrefix} X`, `${labelPrefix} Y`, `${labelPrefix} Z`];
+  const colors = customColors || ['#f43f5e', '#10b981', '#06b6d4'];
+
   return new Chart(ctx, {
     type: 'line',
     data: {
       labels: [],
       datasets: [
-        { label: `${labelPrefix} X`, data: [], borderColor: '#f43f5e', borderWidth: 1.5, pointRadius: 0, fill: false },
-        { label: `${labelPrefix} Y`, data: [], borderColor: '#10b981', borderWidth: 1.5, pointRadius: 0, fill: false },
-        { label: `${labelPrefix} Z`, data: [], borderColor: '#06b6d4', borderWidth: 1.5, pointRadius: 0, fill: false }
+        { label: labels[0], data: [], borderColor: colors[0], borderWidth: 1.5, pointRadius: 0, fill: false },
+        { label: labels[1], data: [], borderColor: colors[1], borderWidth: 1.5, pointRadius: 0, fill: false },
+        { label: labels[2], data: [], borderColor: colors[2], borderWidth: 1.5, pointRadius: 0, fill: false }
       ]
     },
     options: {
@@ -276,6 +335,7 @@ function createSingleChart(canvasId, labelPrefix) {
 }
 
 function initSensorCharts() {
+  eulerChart = createSingleChart('eulerChart', ['Roll °', 'Pitch °', 'Yaw °'], ['#ec4899', '#10b981', '#06b6d4']);
   accelChart = createSingleChart('accelChart', 'Accel');
   gyroChart = createSingleChart('gyroChart', 'Gyro');
   magChart = createSingleChart('magChart', 'Mag');
@@ -383,8 +443,88 @@ document.getElementById('btnToggleGrid').addEventListener('click', (e) => {
   e.currentTarget.classList.toggle('active', gridVisible);
 });
 
+// ----------------------------------------------------
+// Axis Swap UI Binding & Handlers
+// ----------------------------------------------------
+const elAxisSwapDrawer = document.getElementById('axisSwapDrawer');
+const elBtnToggleAxisSwap = document.getElementById('btnToggleAxisSwap');
+const elBtnQuickAxisSwap = document.getElementById('btnQuickAxisSwap');
+const elBtnCloseAxisDrawer = document.getElementById('btnCloseAxisDrawer');
+
+const elSelectRoll = document.getElementById('selectRollAxis');
+const elSelectPitch = document.getElementById('selectPitchAxis');
+const elSelectYaw = document.getElementById('selectYawAxis');
+
+const elChkInvertRoll = document.getElementById('chkInvertRoll');
+const elChkInvertPitch = document.getElementById('chkInvertPitch');
+const elChkInvertYaw = document.getElementById('chkInvertYaw');
+
+function toggleAxisSwapDrawer() {
+  if (!elAxisSwapDrawer) return;
+  elAxisSwapDrawer.classList.toggle('hidden');
+  const isVisible = !elAxisSwapDrawer.classList.contains('hidden');
+  if (elBtnToggleAxisSwap) elBtnToggleAxisSwap.classList.toggle('active', isVisible);
+}
+
+if (elBtnToggleAxisSwap) elBtnToggleAxisSwap.addEventListener('click', toggleAxisSwapDrawer);
+if (elBtnQuickAxisSwap) elBtnQuickAxisSwap.addEventListener('click', toggleAxisSwapDrawer);
+if (elBtnCloseAxisDrawer) elBtnCloseAxisDrawer.addEventListener('click', toggleAxisSwapDrawer);
+
+function syncAxisSwapUI() {
+  if (elSelectRoll) elSelectRoll.value = axisSwapConfig.rollSource;
+  if (elSelectPitch) elSelectPitch.value = axisSwapConfig.pitchSource;
+  if (elSelectYaw) elSelectYaw.value = axisSwapConfig.yawSource;
+
+  if (elChkInvertRoll) elChkInvertRoll.checked = axisSwapConfig.invertRoll;
+  if (elChkInvertPitch) elChkInvertPitch.checked = axisSwapConfig.invertPitch;
+  if (elChkInvertYaw) elChkInvertYaw.checked = axisSwapConfig.invertYaw;
+}
+
+function updateAxisSwapFromUI() {
+  if (elSelectRoll) axisSwapConfig.rollSource = elSelectRoll.value;
+  if (elSelectPitch) axisSwapConfig.pitchSource = elSelectPitch.value;
+  if (elSelectYaw) axisSwapConfig.yawSource = elSelectYaw.value;
+
+  if (elChkInvertRoll) axisSwapConfig.invertRoll = elChkInvertRoll.checked;
+  if (elChkInvertPitch) axisSwapConfig.invertPitch = elChkInvertPitch.checked;
+  if (elChkInvertYaw) axisSwapConfig.invertYaw = elChkInvertYaw.checked;
+
+  saveAxisSwapConfig();
+}
+
+[elSelectRoll, elSelectPitch, elSelectYaw, elChkInvertRoll, elChkInvertPitch, elChkInvertYaw].forEach(el => {
+  if (el) el.addEventListener('change', updateAxisSwapFromUI);
+});
+
+// Quick Presets
+document.getElementById('presetDefault')?.addEventListener('click', () => {
+  axisSwapConfig = { rollSource: 'roll', pitchSource: 'pitch', yawSource: 'yaw', invertRoll: false, invertPitch: false, invertYaw: false };
+  syncAxisSwapUI();
+  saveAxisSwapConfig();
+});
+
+document.getElementById('presetSwapRP')?.addEventListener('click', () => {
+  axisSwapConfig = { ...axisSwapConfig, rollSource: 'pitch', pitchSource: 'roll' };
+  syncAxisSwapUI();
+  saveAxisSwapConfig();
+});
+
+document.getElementById('presetSwapPY')?.addEventListener('click', () => {
+  axisSwapConfig = { ...axisSwapConfig, pitchSource: 'yaw', yawSource: 'pitch' };
+  syncAxisSwapUI();
+  saveAxisSwapConfig();
+});
+
+document.getElementById('presetSwapRY')?.addEventListener('click', () => {
+  axisSwapConfig = { ...axisSwapConfig, rollSource: 'yaw', yawSource: 'roll' };
+  syncAxisSwapUI();
+  saveAxisSwapConfig();
+});
+
 // Launch on page load
 window.addEventListener('DOMContentLoaded', () => {
+  loadAxisSwapConfig();
+  syncAxisSwapUI();
   initScene();
   initSensorCharts();
   connectTelemetryStream();
