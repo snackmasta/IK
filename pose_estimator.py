@@ -117,10 +117,11 @@ class PoseEstimator:
     """
     GRAVITY = 9.80665  # m/s^2
 
-    def __init__(self, beta=0.1, vel_decay=0.95, zero_velocity_thresh=0.15):
+    def __init__(self, beta=0.15, vel_decay=0.92, zero_velocity_thresh=0.20):
         self.ahrs = MadgwickAHRS(beta=beta)
         self.vel_decay = vel_decay
         self.zero_velocity_thresh = zero_velocity_thresh
+
 
         self.position = np.zeros(3, dtype=float)      # [x, y, z] in meters
         self.velocity = np.zeros(3, dtype=float)      # [vx, vy, vz] in m/s
@@ -241,24 +242,35 @@ class PoseEstimator:
         R = self.quaternion_to_rotation_matrix(q)
         roll, pitch, yaw = self.quaternion_to_euler(q)
 
-        # 3. Convert Body Acceleration from g to m/s^2 and Rotate into World Frame
+        # 3. Compute Body-Frame Gravity Vector from Estimated Orientation
+        # World gravity is [0, 0, +1g] -> Body gravity is R^T @ [0, 0, GRAVITY]
+        g_body = R.T @ np.array([0.0, 0.0, self.GRAVITY], dtype=float)
+
+        # 4. Remove Gravity in Body Frame, then Rotate Linear Acceleration into World Frame
         accel_body_mps2 = np.array([ax, ay, az], dtype=float) * self.GRAVITY
-        accel_world = R @ accel_body_mps2
+        accel_linear_body = accel_body_mps2 - g_body
+        self.linear_accel = R @ accel_linear_body
 
-        # 4. Remove Earth Gravity Vector [0, 0, +1g] from World Frame Acceleration
-        self.linear_accel = accel_world - np.array([0.0, 0.0, self.GRAVITY], dtype=float)
-
-        # 5. Zero-Velocity Update (ZUPT) check for drift reduction
+        # 5. Rotational Motion Gating & Adaptive Zero-Velocity Update (ZUPT)
+        # Centripetal acceleration spikes occur when rotating the controller in hand.
+        gyro_norm_rad = math.sqrt(gx_rad*gx_rad + gy_rad*gy_rad + gz_rad*gz_rad)
         lin_accel_norm = np.linalg.norm(self.linear_accel)
-        if lin_accel_norm < self.zero_velocity_thresh:
+
+        # Dynamic acceleration deadband based on rotation speed
+        dynamic_thresh = self.zero_velocity_thresh + (0.8 * gyro_norm_rad)
+
+        if lin_accel_norm < dynamic_thresh:
             self.linear_accel = np.zeros(3)
-            self.velocity *= 0.5  # Rapid velocity decay when stationary
+            # Rapid velocity decay when stationary or during pure rotation
+            decay_factor = 0.3 if gyro_norm_rad > 0.2 else 0.85
+            self.velocity *= decay_factor
         else:
             self.velocity += self.linear_accel * dt
             self.velocity *= self.vel_decay  # High-pass dampening
 
         # 6. Integrate Velocity to Position (Translation)
         self.position += self.velocity * dt
+
 
         return {
             "is_calibrating": self.is_calibrating,
