@@ -68,9 +68,13 @@ class TelemetryHTTPServer(http.server.SimpleHTTPRequestHandler):
 
     def log_message(self, format, *args):
         # Suppress routine GET logging for clean console output
-        if "GET /stream" in args[0]:
-            return
+        try:
+            if len(args) > 0 and isinstance(args[0], str) and "GET /stream" in args[0]:
+                return
+        except Exception:
+            pass
         super().log_message(format, *args)
+
 
 
 def start_udp_listener():

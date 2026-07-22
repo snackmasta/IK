@@ -32,13 +32,12 @@ const elSpeed = document.getElementById('speedVal');
 function initScene() {
   const canvas = document.getElementById('canvas3d');
   
-  // Scene
+  // Scene (No fog, so objects never fade out at distance)
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x090d16);
-  scene.fog = new THREE.FogExp2(0x090d16, 0.08);
 
-  // Camera
-  camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.05, 100);
+  // Camera (Far plane expanded to 100,000 to prevent clipping)
+  camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.01, 100000);
   camera.position.set(1.5, 1.2, 2.0);
 
   // Renderer
@@ -58,6 +57,7 @@ function initScene() {
   scene.add(ambientLight);
 
   const dirLight = new THREE.DirectionalLight(0x06b6d4, 1.2);
+
   dirLight.position.set(3, 5, 2);
   dirLight.castShadow = true;
   scene.add(dirLight);
@@ -124,6 +124,11 @@ function createControllerMesh() {
   const axesHelper = new THREE.AxesHelper(0.2);
   controllerGroup.add(axesHelper);
 
+  controllerGroup.traverse((child) => {
+    child.frustumCulled = false;
+  });
+  controllerGroup.frustumCulled = false;
+
   scene.add(controllerGroup);
 }
 
@@ -140,8 +145,10 @@ function createTrajectoryLine() {
   });
 
   trajectoryLine = new THREE.Line(lineGeo, lineMat);
+  trajectoryLine.frustumCulled = false;
   scene.add(trajectoryLine);
 }
+
 
 // Add a 3D point to the dynamic trajectory trail
 function addTrajectoryPoint(x, y, z) {
@@ -227,6 +234,8 @@ function updateTelemetry(data) {
 }
 
 // Animation Frame Loop
+let followMode = false;
+
 function animate() {
   requestAnimationFrame(animate);
 
@@ -234,6 +243,11 @@ function animate() {
   if (controllerGroup) {
     controllerGroup.position.lerp(new THREE.Vector3(currentTargetPos.x, currentTargetPos.y, currentTargetPos.z), 0.3);
     controllerGroup.quaternion.slerp(currentTargetQuat, 0.3);
+
+    // Smoothly track controller position with camera target if follow mode is active
+    if (followMode) {
+      controls.target.lerp(controllerGroup.position, 0.1);
+    }
   }
 
   controls.update();
@@ -248,6 +262,11 @@ function onWindowResize() {
 }
 
 // Bind Button Listeners
+document.getElementById('btnToggleFollow').addEventListener('click', (e) => {
+  followMode = !followMode;
+  e.currentTarget.classList.toggle('active', followMode);
+});
+
 document.getElementById('btnResetTrail').addEventListener('click', () => {
   trajectoryPoints = [];
   trajectoryLine.geometry.setDrawRange(0, 0);
@@ -276,3 +295,4 @@ window.addEventListener('DOMContentLoaded', () => {
   initScene();
   connectTelemetryStream();
 });
+
