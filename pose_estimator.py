@@ -226,32 +226,10 @@ class PoseEstimator:
         R = self.quaternion_to_rotation_matrix(q)
         roll, pitch, yaw = self.quaternion_to_euler(q)
 
-        # 2. SlimeVR Forward Kinematics Arm Model Position
-        arm_vector = R @ np.array([0.0, 0.0, -(self.upper_arm_length + self.forearm_length)], dtype=float)
-        kinematic_pos = self.shoulder_pos + arm_vector
-
-        # 3. Dynamic Gravity Compensation & Acceleration Integration
-        g_body = R.T @ np.array([0.0, 0.0, self.GRAVITY], dtype=float)
-        accel_body_mps2 = np.array([ax, ay, az], dtype=float) * self.GRAVITY
-        accel_linear_body = accel_body_mps2 - g_body
-        self.linear_accel = R @ accel_linear_body
-
-        gyro_norm_rad = math.sqrt(gx_rad*gx_rad + gy_rad*gy_rad + gz_rad*gz_rad)
-        lin_accel_norm = np.linalg.norm(self.linear_accel)
-
-        dynamic_thresh = self.zero_velocity_thresh + (0.8 * gyro_norm_rad)
-
-        if lin_accel_norm < dynamic_thresh:
-            self.linear_accel = np.zeros(3)
-            decay_factor = 0.3 if gyro_norm_rad > 0.2 else 0.85
-            self.velocity *= decay_factor
-        else:
-            self.velocity += self.linear_accel * dt
-            self.velocity *= self.vel_decay
-
-        # Blend Kinematic FK position with Acceleration Integration for responsive 6DoF tracking
-        self.position += self.velocity * dt
-        blended_position = 0.75 * self.position + 0.25 * kinematic_pos
+        # 3. Angle-only Mode: zero out position/translation movement integration
+        self.position = np.zeros(3, dtype=float)
+        self.velocity = np.zeros(3, dtype=float)
+        self.linear_accel = np.zeros(3, dtype=float)
 
         return {
             "is_calibrating": self.is_calibrating,
@@ -261,12 +239,8 @@ class PoseEstimator:
                 "euler": {"roll": float(roll), "pitch": float(pitch), "yaw": float(yaw)}
             },
             "translation": {
-                "position": {"x": float(blended_position[0]), "y": float(blended_position[1]), "z": float(blended_position[2])},
-                "velocity": {"x": float(self.velocity[0]), "y": float(self.velocity[1]), "z": float(self.velocity[2])},
-                "linear_accel": {"x": float(self.linear_accel[0]), "y": float(self.linear_accel[1]), "z": float(self.linear_accel[2])}
-            },
-            "kinematic_arm": {
-                "shoulder": {"x": float(self.shoulder_pos[0]), "y": float(self.shoulder_pos[1]), "z": float(self.shoulder_pos[2])},
-                "hand": {"x": float(kinematic_pos[0]), "y": float(kinematic_pos[1]), "z": float(kinematic_pos[2])}
+                "position": {"x": 0.0, "y": 0.0, "z": 0.0},
+                "velocity": {"x": 0.0, "y": 0.0, "z": 0.0},
+                "linear_accel": {"x": 0.0, "y": 0.0, "z": 0.0}
             }
         }
