@@ -12,7 +12,7 @@ from pose_estimator import PoseEstimator
 DECLINATION_ANGLE_DEG = 0.0  # Set this for accurate true north calculation
 
 # UDP Configuration
-UDP_IP = "127.0.0.1"  # Target IP address (change to receiver's IP or "255.255.255.255" for broadcast)
+UDP_IP = "192.168.137.1"  # Target IP address (change to receiver's IP or "255.255.255.255" for broadcast)
 UDP_PORT = 5005       # Target UDP Port
 
 def calculate_heading(mag_x, mag_y, declination_deg=0.0):
