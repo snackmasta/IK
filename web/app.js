@@ -122,42 +122,7 @@ function createControllerMesh() {
   stickMesh.position.set(0, 0.04, 0);
   controllerGroup.add(stickMesh);
 
-  // Construct SlimeVR Kinematic Arm Rig Line
-  createArmRig();
-
   scene.add(controllerGroup);
-}
-
-let armLineMesh;
-function createArmRig() {
-  const armGeo = new THREE.BufferGeometry();
-  const positions = new Float32Array(2 * 3); // 2 points (Shoulder to Hand)
-  armGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-
-  const armMat = new THREE.LineDashedMaterial({
-    color: 0x8b5cf6,
-    dashSize: 0.05,
-    gapSize: 0.03,
-    linewidth: 2
-  });
-
-  armLineMesh = new THREE.Line(armGeo, armMat);
-  armLineMesh.frustumCulled = false;
-  scene.add(armLineMesh);
-}
-
-function updateArmRig(shoulder, hand) {
-  if (!armLineMesh || !shoulder || !hand) return;
-  const positions = armLineMesh.geometry.attributes.position.array;
-  positions[0] = shoulder.x || 0.2;
-  positions[1] = shoulder.y || -0.2;
-  positions[2] = shoulder.z || 0.0;
-  positions[3] = hand.x || 0.0;
-  positions[4] = hand.y || 0.0;
-  positions[5] = hand.z || 0.0;
-
-  armLineMesh.geometry.attributes.position.needsUpdate = true;
-  armLineMesh.computeLineDistances();
 }
 
 
@@ -243,11 +208,6 @@ function updateTelemetry(data) {
 
   // Add point to trajectory trail
   addTrajectoryPoint(posX, posY, posZ);
-
-  // Update SlimeVR Kinematic Arm Line Rig
-  if (data.kinematic_arm) {
-    updateArmRig(data.kinematic_arm.shoulder, { x: posX, y: posY, z: posZ });
-  }
 
 
   // Update Dashboard Text Metrics
