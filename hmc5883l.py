@@ -12,11 +12,8 @@ class HMC5883L:
     
     # Data registers - Note the non-standard order (X, Z, Y)
     REG_DATA_X_H = 0x03
-    REG_DATA_Z_H = 0x05
-    REG_DATA_Y_H = 0x07
 
     # Gain scaling configurations (LSB per Gauss)
-    # Default is ±1.3 Gauss (gain setting 1) -> 1090 LSB/Gauss
     GAINS = {
         0.88: (0x00, 1370.0),
         1.3:  (0x20, 1090.0), # Default
@@ -31,8 +28,6 @@ class HMC5883L:
     def __init__(self, bus_id=1, gauss_range=1.3):
         """
         Initializes the HMC5883L connection.
-        :param bus_id: I2C bus ID (normally 1 on Raspberry Pi 4).
-        :param gauss_range: Sensor measurement range in Gauss (default ±1.3).
         """
         self.bus_id = bus_id
         self.bus = None
@@ -40,64 +35,67 @@ class HMC5883L:
             raise ValueError(f"Invalid Gauss range. Choose from: {list(self.GAINS.keys())}")
         self.gauss_range = gauss_range
         self.gain_val, self.scale_factor = self.GAINS[gauss_range]
+        self._last_mag = {'x': 0.0, 'y': 0.0, 'z': 0.0}
 
     def initialize(self):
         """
-        Initializes the sensor config registers for continuous measurement mode.
+        Initializes the sensor config registers for continuous measurement mode with retries.
         """
-        try:
-            self.bus = smbus2.SMBus(self.bus_id)
-            
-            # Config A: 8 samples averaged, 15 Hz measurement rate, normal measurement configuration
-            # 0b01110000 = 0x70
-            self.bus.write_byte_data(self.I2C_ADDR, self.REG_CONFIG_A, 0x70)
-
-            # Config B: Set gain/range scale
-            self.bus.write_byte_data(self.I2C_ADDR, self.REG_CONFIG_B, self.gain_val)
-
-            # Mode Register: Continuous measurement mode
-            # 0b00000000 = 0x00
-            self.bus.write_byte_data(self.I2C_ADDR, self.REG_MODE, 0x00)
-            time.sleep(0.1) # Wait for setup stabilization
-        except Exception as e:
-            raise RuntimeError(f"Failed to initialize HMC5883L on bus {self.bus_id}: {e}")
-
-    def _read_raw_word(self, register):
-        """
-        Reads a 16-bit signed word from the specified high byte register.
-        """
-        high = self.bus.read_byte_data(self.I2C_ADDR, register)
-        low = self.bus.read_byte_data(self.I2C_ADDR, register + 1)
-        val = (high << 8) + low
+        self.bus = smbus2.SMBus(self.bus_id)
         
-        # Convert to 16-bit signed integer
-        if val >= 0x8000:
-            val -= 0x10000
-        return val
+        for attempt in range(3):
+            try:
+                # Config A: 8 samples averaged, 15 Hz measurement rate
+                self.bus.write_byte_data(self.I2C_ADDR, self.REG_CONFIG_A, 0x70)
+                # Config B: Set gain/range scale
+                self.bus.write_byte_data(self.I2C_ADDR, self.REG_CONFIG_B, self.gain_val)
+                # Mode Register: Continuous measurement mode
+                self.bus.write_byte_data(self.I2C_ADDR, self.REG_MODE, 0x00)
+                time.sleep(0.05)
+                print(f"[HMC5883L] Successfully initialized on bus {self.bus_id} at address 0x1E")
+                return
+            except OSError as e:
+                if attempt == 2:
+                    raise RuntimeError(f"Failed to initialize HMC5883L on bus {self.bus_id}: {e}")
+                time.sleep(0.05)
 
-    def read_magnetometer_data(self):
+    def read_magnetometer_data(self, retries=3):
         """
-        Reads the magnetometer axis values.
-        :return: Dict containing X, Y, Z magnetic fields in micro-Tesla (µT).
-                 (1 Gauss = 100 µT)
+        Reads magnetometer axis values in micro-Tesla (µT) using single 6-byte I2C block read.
         """
-        # HMC5883L registers sequence is X, Z, Y!
-        raw_x = self._read_raw_word(self.REG_DATA_X_H)
-        raw_z = self._read_raw_word(self.REG_DATA_Z_H)
-        raw_y = self._read_raw_word(self.REG_DATA_Y_H)
+        for attempt in range(retries):
+            try:
+                # HMC5883L outputs X_H, X_L, Z_H, Z_L, Y_H, Y_L in sequence
+                data = self.bus.read_i2c_block_data(self.I2C_ADDR, self.REG_DATA_X_H, 6)
+                
+                raw_x = (data[0] << 8) | data[1]
+                raw_z = (data[2] << 8) | data[3]
+                raw_y = (data[4] << 8) | data[5]
 
-        # Convert raw LSB to Gauss, then multiply by 100 to get micro-Tesla (µT)
-        gauss_x = raw_x / self.scale_factor
-        gauss_y = raw_y / self.scale_factor
-        gauss_z = raw_z / self.scale_factor
+                if raw_x >= 0x8000: raw_x -= 0x10000
+                if raw_y >= 0x8000: raw_y -= 0x10000
+                if raw_z >= 0x8000: raw_z -= 0x10000
 
-        return {
-            'x': gauss_x * 100.0,
-            'y': gauss_y * 100.0,
-            'z': gauss_z * 100.0
-        }
+                gauss_x = raw_x / self.scale_factor
+                gauss_y = raw_y / self.scale_factor
+                gauss_z = raw_z / self.scale_factor
+
+                self._last_mag = {
+                    'x': gauss_x * 100.0,
+                    'y': gauss_y * 100.0,
+                    'z': gauss_z * 100.0
+                }
+                return self._last_mag
+            except OSError:
+                if attempt == retries - 1:
+                    return self._last_mag
+                time.sleep(0.002)
+        return self._last_mag
 
     def close(self):
         """Closes the I2C bus connection."""
         if self.bus:
-            self.bus.close()
+            try:
+                self.bus.close()
+            except Exception:
+                pass

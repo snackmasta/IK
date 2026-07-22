@@ -11,7 +11,9 @@ class MahonyAHRS:
         self.ki = ki  # Integral feedback gain
         self.mag_baseline_ut = mag_baseline_ut
 
-        self.q = np.array([1.0, 0.0, 0.0, 0.0], dtype=float)  # [qw, qx, qy, qz]
+        # Initial resting quaternion: Roll = 90 deg, Pitch = 0 deg, Yaw = 0 deg
+        # q = [cos(pi/4), sin(pi/4), 0, 0] = [0.70710678, 0.70710678, 0, 0]
+        self.q = np.array([0.7071067811865476, 0.7071067811865476, 0.0, 0.0], dtype=float)  # [qw, qx, qy, qz]
         self.e_int = np.zeros(3, dtype=float)                 # Gyro bias integral accumulator
         self.is_mag_anomaly = False
 

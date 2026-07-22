@@ -15,7 +15,7 @@ UDP_IP = "0.0.0.0"
 # Global state to store latest telemetry packet and connected client queues
 latest_telemetry = {
     "timestamp": time.time(),
-    "rotation": {"quaternion": {"w": 1, "x": 0, "y": 0, "z": 0}, "euler": {"roll": 0, "pitch": 0, "yaw": 0}},
+    "rotation": {"quaternion": {"w": 0.7071, "x": 0.7071, "y": 0, "z": 0}, "euler": {"roll": 90.0, "pitch": 0.0, "yaw": 0.0}},
     "translation": {"position": {"x": 0, "y": 0, "z": 0}, "velocity": {"x": 0, "y": 0, "z": 0}, "linear_accel": {"x": 0, "y": 0, "z": 0}},
     "heading": 0.0,
     "status": "waiting"

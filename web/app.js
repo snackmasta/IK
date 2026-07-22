@@ -226,8 +226,8 @@ function updateTelemetry(data) {
 
   const rawPos = data.translation.position || { x: 0, y: 0, z: 0 };
   rawLatestPos = rawPos;
-  const rawEuler = data.rotation.euler || { roll: 0, pitch: 0, yaw: 0 };
-  const rawQuat = data.rotation.quaternion || { w: 1, x: 0, y: 0, z: 0 };
+  const rawEuler = data.rotation.euler || { roll: 90, pitch: 0, yaw: 0 };
+  const rawQuat = data.rotation.quaternion || { w: 0.7071, x: 0.7071, y: 0, z: 0 };
   const vel = data.translation.velocity || { x: 0, y: 0, z: 0 };
 
   // Remap Roll, Pitch, and Yaw according to user settings
