@@ -113,6 +113,7 @@ class PoseEstimator:
     """
     6DoF Pose Estimator combining 3DoF Rotation (Quaternion + Euler)
     and 3DoF Translation (Position + Velocity from double integration).
+    Includes automatic IMU drift bias calibration and ZUPT zeroing.
     """
     GRAVITY = 9.80665  # m/s^2
 
@@ -125,10 +126,31 @@ class PoseEstimator:
         self.velocity = np.zeros(3, dtype=float)      # [vx, vy, vz] in m/s
         self.linear_accel = np.zeros(3, dtype=float)  # [ax, ay, az] in m/s^2 (world frame)
 
+        # Drift Offset Biases
+        self.gyro_bias = np.zeros(3, dtype=float)     # [gx, gy, gz] in deg/s
+        self.accel_bias = np.zeros(3, dtype=float)    # [ax, ay, az] in g units
+
+        # Calibration state
+        self.is_calibrating = False
+        self.calib_accel_samples = []
+        self.calib_gyro_samples = []
+        self.calib_target_samples = 100
+
+    def start_calibration(self, num_samples=100):
+        """Starts a static calibration routine to measure sensor bias."""
+        self.is_calibrating = True
+        self.calib_target_samples = num_samples
+        self.calib_accel_samples = []
+        self.calib_gyro_samples = []
+
+    def reset_drift(self):
+        """Resets position, velocity, and linear acceleration vectors to zero."""
+        self.position = np.zeros(3, dtype=float)
+        self.velocity = np.zeros(3, dtype=float)
+        self.linear_accel = np.zeros(3, dtype=float)
+
     def quaternion_to_rotation_matrix(self, q):
-        """
-        Converts quaternion [qw, qx, qy, qz] to a 3x3 Rotation Matrix.
-        """
+        """Converts quaternion [qw, qx, qy, qz] to a 3x3 Rotation Matrix."""
         qw, qx, qy, qz = q[0], q[1], q[2], q[3]
         return np.array([
             [1 - 2*(qy**2 + qz**2),     2*(qx*qy - qw*qz),     2*(qx*qz + qw*qy)],
@@ -137,9 +159,7 @@ class PoseEstimator:
         ], dtype=float)
 
     def quaternion_to_euler(self, q):
-        """
-        Converts quaternion [qw, qx, qy, qz] to Euler angles (Roll, Pitch, Yaw) in degrees.
-        """
+        """Converts quaternion [qw, qx, qy, qz] to Euler angles (Roll, Pitch, Yaw) in degrees."""
         qw, qx, qy, qz = q[0], q[1], q[2], q[3]
 
         # Roll (x-axis rotation)
@@ -161,22 +181,49 @@ class PoseEstimator:
 
     def update(self, accel_g, gyro_deg, mag_ut, dt):
         """
-        Updates 6DoF state.
-        :param accel_g: Dict or list/tuple [ax, ay, az] in g units.
-        :param gyro_deg: Dict or list/tuple [gx, gy, gz] in °/s units.
-        :param mag_ut: Dict or list/tuple [mx, my, mz] in µT units.
-        :param dt: Delta time in seconds since last update.
+        Updates 6DoF state with bias compensation.
         """
         if dt <= 0 or dt > 0.5:
             dt = 0.01  # Safeguard against timing anomalies
 
-        ax = accel_g['x'] if isinstance(accel_g, dict) else accel_g[0]
-        ay = accel_g['y'] if isinstance(accel_g, dict) else accel_g[1]
-        az = accel_g['z'] if isinstance(accel_g, dict) else accel_g[2]
+        raw_ax = accel_g['x'] if isinstance(accel_g, dict) else accel_g[0]
+        raw_ay = accel_g['y'] if isinstance(accel_g, dict) else accel_g[1]
+        raw_az = accel_g['z'] if isinstance(accel_g, dict) else accel_g[2]
 
-        gx_rad = math.radians(gyro_deg['x'] if isinstance(gyro_deg, dict) else gyro_deg[0])
-        gy_rad = math.radians(gyro_deg['y'] if isinstance(gyro_deg, dict) else gyro_deg[1])
-        gz_rad = math.radians(gyro_deg['z'] if isinstance(gyro_deg, dict) else gyro_deg[2])
+        raw_gx = gyro_deg['x'] if isinstance(gyro_deg, dict) else gyro_deg[0]
+        raw_gy = gyro_deg['y'] if isinstance(gyro_deg, dict) else gyro_deg[1]
+        raw_gz = gyro_deg['z'] if isinstance(gyro_deg, dict) else gyro_deg[2]
+
+        # Handle calibration collection if active
+        if self.is_calibrating:
+            self.calib_accel_samples.append([raw_ax, raw_ay, raw_az])
+            self.calib_gyro_samples.append([raw_gx, raw_gy, raw_gz])
+
+            if len(self.calib_accel_samples) >= self.calib_target_samples:
+                # Compute bias offsets
+                accel_arr = np.array(self.calib_accel_samples)
+                gyro_arr = np.array(self.calib_gyro_samples)
+
+                self.gyro_bias = np.mean(gyro_arr, axis=0)
+                # For accel bias, target is [0, 0, 1g] when flat
+                mean_accel = np.mean(accel_arr, axis=0)
+                self.accel_bias = mean_accel - np.array([0.0, 0.0, 1.0])
+
+                self.is_calibrating = False
+                self.reset_drift()
+
+        # Apply bias calibration subtraction
+        ax = raw_ax - self.accel_bias[0]
+        ay = raw_ay - self.accel_bias[1]
+        az = raw_az - self.accel_bias[2]
+
+        gx = raw_gx - self.gyro_bias[0]
+        gy = raw_gy - self.gyro_bias[1]
+        gz = raw_gz - self.gyro_bias[2]
+
+        gx_rad = math.radians(gx)
+        gy_rad = math.radians(gy)
+        gz_rad = math.radians(gz)
 
         mx = mag_ut['x'] if isinstance(mag_ut, dict) else mag_ut[0]
         my = mag_ut['y'] if isinstance(mag_ut, dict) else mag_ut[1]
@@ -214,6 +261,7 @@ class PoseEstimator:
         self.position += self.velocity * dt
 
         return {
+            "is_calibrating": self.is_calibrating,
             "rotation": {
                 "quaternion": {"w": float(q[0]), "x": float(q[1]), "y": float(q[2]), "z": float(q[3])},
                 "euler": {"roll": float(roll), "pitch": float(pitch), "yaw": float(yaw)}
@@ -224,3 +272,4 @@ class PoseEstimator:
                 "linear_accel": {"x": float(self.linear_accel[0]), "y": float(self.linear_accel[1]), "z": float(self.linear_accel[2])}
             }
         }
+

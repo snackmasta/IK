@@ -9,8 +9,10 @@ const MAX_TRAJECTORY_POINTS = 1000;
 
 // Origin offset for resetting zero-position
 let positionOffset = { x: 0, y: 0, z: 0 };
+let rawLatestPos = { x: 0, y: 0, z: 0 };
 let currentTargetPos = { x: 0, y: 0, z: 0 };
 let currentTargetQuat = new THREE.Quaternion();
+
 
 // Setup DOM elements
 const elStatusBadge = document.getElementById('statusBadge');
@@ -197,7 +199,9 @@ function updateTelemetry(data) {
   if (!data || !data.translation || !data.rotation) return;
 
   const rawPos = data.translation.position || { x: 0, y: 0, z: 0 };
+  rawLatestPos = rawPos;
   const euler = data.rotation.euler || { roll: 0, pitch: 0, yaw: 0 };
+
   const quat = data.rotation.quaternion || { w: 1, x: 0, y: 0, z: 0 };
   const vel = data.translation.velocity || { x: 0, y: 0, z: 0 };
 
@@ -262,10 +266,17 @@ function onWindowResize() {
 }
 
 // Bind Button Listeners
+document.getElementById('btnCalibrateDrift').addEventListener('click', () => {
+  positionOffset = { ...rawLatestPos };
+  trajectoryPoints = [];
+  trajectoryLine.geometry.setDrawRange(0, 0);
+});
+
 document.getElementById('btnToggleFollow').addEventListener('click', (e) => {
   followMode = !followMode;
   e.currentTarget.classList.toggle('active', followMode);
 });
+
 
 document.getElementById('btnResetTrail').addEventListener('click', () => {
   trajectoryPoints = [];

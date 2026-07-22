@@ -45,7 +45,7 @@ def main():
     imu = MPU6050(bus_id=1)
     mag = HMC5883L(bus_id=1)
     
-    # Initialize 6DoF Pose Estimator
+    # Initialize 6DoF Pose Estimator & Start Drift Bias Calibration
     pose_estimator = PoseEstimator(beta=0.1, vel_decay=0.95, zero_velocity_thresh=0.15)
     
     try:
@@ -61,6 +61,10 @@ def main():
         print("Make sure your connections are secure and I2C is enabled on the Pi.")
         sys.exit(1)
         
+    # Start sensor drift bias calibration (100 samples ~ 2 seconds)
+    print("Calibrating IMU sensor drift offsets... Keep controller still for 2 seconds.")
+    pose_estimator.start_calibration(num_samples=100)
+        
     # Set up UDP socket
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     if UDP_IP == "255.255.255.255":
@@ -72,6 +76,7 @@ def main():
     print(f"{'Position (m)':^18} | {'Euler Angles (deg)':^24} | {'Quaternion (w,x,y,z)':^24} | {'Heading':^8}")
     print(f"{'X / Y / Z':^18} | {'Roll / Pitch / Yaw':^24} | {'w / x / y / z':^24} | {'(Deg)':^8}")
     print("-" * 85)
+
     
     last_time = time.time()
     
